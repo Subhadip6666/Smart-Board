@@ -1,6 +1,7 @@
 
 export enum GestureMode {
   DRAW = 'DRAW',
+  SHAPE = 'SHAPE',
   SELECT = 'SELECT',
   ERASE = 'ERASE',
   CLEAR = 'CLEAR',

@@ -37,15 +37,16 @@ const App: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 w-full">
             {[
-              { icon: '☝️', label: 'Draw', desc: 'Index Finger' },
-              { icon: '✌️', label: 'Air UI', desc: 'Index + Middle' },
-              { icon: '🤏', label: 'Erase', desc: 'Thumb Pinch' },
-              { icon: '✋', label: 'Clear', desc: 'Open Palm' }
+              { icon: '☝️', label: 'Draw', desc: 'Index' },
+              { icon: '👌', label: 'Shape', desc: '3 Fingers' },
+              { icon: '✌️', label: 'Air UI', desc: '2 Fingers' },
+              { icon: '🤏', label: 'Erase', desc: 'Pinch' },
+              { icon: '✋', label: 'Clear', desc: 'Palm' }
             ].map((item) => (
               <div key={item.label} className="bg-white/5 border border-white/5 rounded-3xl p-5 flex flex-col items-center gap-2 group hover:bg-white/10 transition-all">
-                <span className="text-4xl group-hover:scale-125 transition-transform duration-300">{item.icon}</span>
+                <span className="text-3xl group-hover:scale-125 transition-transform duration-300">{item.icon}</span>
                 <div className="flex flex-col">
                   <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{item.label}</span>
                   <span className="text-[9px] font-medium text-slate-500">{item.desc}</span>
@@ -102,6 +103,7 @@ const App: React.FC = () => {
             <span className="text-xs font-black uppercase tracking-widest text-slate-500">Status</span>
             <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2
               ${activeGesture === GestureMode.DRAW ? 'bg-blue-500/20 text-blue-400' : 
+                activeGesture === GestureMode.SHAPE ? 'bg-emerald-500/20 text-emerald-400' : 
                 activeGesture === GestureMode.ERASE ? 'bg-red-500/20 text-red-400' : 
                 activeGesture === GestureMode.SELECT ? 'bg-purple-500/20 text-purple-400' :
                 'bg-slate-800 text-slate-400'}`}>
@@ -113,7 +115,7 @@ const App: React.FC = () => {
             className="p-3 bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-white/5 hover:bg-slate-800 transition-colors text-slate-400"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15" />
             </svg>
           </button>
         </div>
@@ -171,6 +173,10 @@ const App: React.FC = () => {
             <div className="flex flex-col items-center">
               <span className="text-xl">☝️</span>
               <span className="text-[8px] font-bold text-slate-600 uppercase">Draw</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-xl">👌</span>
+              <span className="text-[8px] font-bold text-slate-600 uppercase">Shape</span>
             </div>
             <div className="flex flex-col items-center">
               <span className="text-xl">✌️</span>
