@@ -1,0 +1,7 @@
+{
+  "name": "VisionBoard AI",
+  "description": "A virtual smartboard application that uses computer vision and hand gestures to draw on screen. Features real-time finger tracking, gesture-based controls, and AI-powered sketch analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
