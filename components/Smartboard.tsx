@@ -26,6 +26,12 @@ const COLOR_OPTIONS = [
   { value: '#ffffff', label: 'White' },
 ];
 
+const SIZE_OPTIONS = [
+  { value: 5, label: 'Small' },
+  { value: 12, label: 'Medium' },
+  { value: 25, label: 'Large' },
+];
+
 const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, setBrushSize, onGestureChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null); 
@@ -70,9 +76,11 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
         drawPerfectedShape(path.points, ctx, path.color, path.width);
       } else {
         ctx.beginPath();
-        ctx.moveTo(path.points[0].x, path.points[0].y);
-        path.points.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.stroke();
+        if (path.points.length > 0) {
+          ctx.moveTo(path.points[0].x, path.points[0].y);
+          path.points.forEach(p => ctx.lineTo(p.x, p.y));
+          ctx.stroke();
+        }
       }
     });
   }, []);
@@ -101,7 +109,6 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
     ctx.lineWidth = sWidth;
 
     if (!isClosed) {
-      // Line
       ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
     } else {
       const radiusX = width / 2;
@@ -111,15 +118,10 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
         const d = Math.sqrt(Math.pow((p.x - centerX) / (radiusX || 1), 2) + Math.pow((p.y - centerY) / (radiusY || 1), 2));
         circularityVariance += Math.pow(d - 1, 2);
       });
-      
       const isCircular = Math.sqrt(circularityVariance / points.length) < 0.22;
-
       if (isCircular) {
         ctx.beginPath(); ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2); ctx.stroke();
       } else {
-        // Simple corner heuristic for Triangle vs Rectangle
-        // If the path area is much smaller than the bounding box, it's likely a triangle
-        // Here we just differentiate based on aspect ratio or simply default to Rect if not circular
         ctx.strokeRect(minX, minY, width, height);
       }
     }
@@ -142,32 +144,25 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
     historyRef.current.push(newPath);
     lastFinalizedTimeRef.current = Date.now();
     
-    // Clear temp canvas
     const tempCtx = activeStrokeCanvasRef.current?.getContext('2d');
     tempCtx?.clearRect(0, 0, activeStrokeCanvasRef.current!.width, activeStrokeCanvasRef.current!.height);
     
     redrawHistory();
-    
     currentPathRef.current = [];
     lastPointRef.current = null;
   }, [color, brushSize, redrawHistory]);
 
   const promoteLastToShape = useCallback(() => {
     const now = Date.now();
-    // If the user shows 3 fingers within 1 second of finishing a freehand draw
     if (now - lastFinalizedTimeRef.current < 1000 && historyRef.current.length > 0) {
       const last = historyRef.current[historyRef.current.length - 1];
       if (!last.isShape) {
         last.isShape = true;
-        lastFinalizedTimeRef.current = 0; // Prevent double trigger
+        lastFinalizedTimeRef.current = 0;
         redrawHistory();
-        
-        // Visual Feedback: Flash the canvas
         if (drawingCanvasRef.current) {
           drawingCanvasRef.current.style.filter = 'brightness(2) saturate(2)';
-          setTimeout(() => {
-            if (drawingCanvasRef.current) drawingCanvasRef.current.style.filter = '';
-          }, 150);
+          setTimeout(() => { if (drawingCanvasRef.current) drawingCanvasRef.current.style.filter = ''; }, 150);
         }
       }
     }
@@ -175,19 +170,14 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
 
   const updateGestureMode = useCallback((newMode: GestureMode) => {
     if (currentModeRef.current !== newMode) {
-      // Transition out of DRAW mode
       if (currentModeRef.current === GestureMode.DRAW) {
         finalizeStroke(newMode === GestureMode.SHAPE);
       }
-
-      // Transition into SHAPE mode from any mode (mostly IDLE)
       if (newMode === GestureMode.SHAPE) {
         promoteLastToShape();
       }
-
       currentModeRef.current = newMode;
       onGestureChange(newMode);
-      
       if (newMode !== GestureMode.SELECT) {
         setCursorPos(null);
         setHoverTarget(null);
@@ -206,7 +196,6 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
         const elapsed = Date.now() - dwellStartTime.current;
         const progress = Math.min(100, (elapsed / DWELL_DURATION) * 100);
         setSelectionProgress(progress);
-        
         if (elapsed > DWELL_DURATION) {
           if (type === 'color') setColor(value);
           else if (type === 'size') setBrushSize(value);
@@ -233,9 +222,6 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
     const y = lastPointRef.current ? lastPointRef.current.y + (targetY - lastPointRef.current.y) * smoothingFactor : targetY;
 
     if (isEraser) {
-      // For eraser, we modify history by removing points within radius
-      // But for performance, we just punch holes in the permanent canvas and the eraser won't be in history
-      // Simplified: Eraser is a "destructive" stroke in history
       permCtx.globalCompositeOperation = 'destination-out';
       permCtx.lineWidth = brushSize * 6;
       permCtx.beginPath();
@@ -277,41 +263,39 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
 
     let mode = GestureMode.IDLE;
     
-    // 1. CLEAR (PALM)
     if (isIndexUp && isMiddleUp && isRingUp && isPinkyUp) {
       mode = GestureMode.CLEAR;
       historyRef.current = [];
       redrawHistory();
     } 
-    // 2. SHAPE (3 FINGERS)
     else if (isIndexUp && isMiddleUp && isRingUp && !isPinkyUp) {
       mode = GestureMode.SHAPE;
     }
-    // 3. ERASE (PINCH)
     else if (pinchDistance < 0.04) {
       mode = GestureMode.ERASE;
       drawOnCanvas(indexTip, true);
     } 
-    // 4. SELECT (2 FINGERS)
     else if (isIndexUp && isMiddleUp && !isRingUp) {
       mode = GestureMode.SELECT;
       setCursorPos({ x: normX * window.innerWidth, y: normY * window.innerHeight });
       
+      // Interaction with Sidebars
       if (normX < 0.15) {
         const colorIndex = Math.floor(normY * COLOR_OPTIONS.length);
         if (colorIndex >= 0 && colorIndex < COLOR_OPTIONS.length) {
           handleSelectionDwell('color', COLOR_OPTIONS[colorIndex].value);
         }
       } else if (normX > 0.85) {
-        // Just use hardcoded sizes for now
-        const sizes = [8, 16, 32];
-        const sizeIndex = Math.floor(normY * sizes.length);
-        if (sizeIndex >= 0 && sizeIndex < sizes.length) {
-          handleSelectionDwell('size', sizes[sizeIndex]);
+        const sizeIndex = Math.floor(normY * SIZE_OPTIONS.length);
+        if (sizeIndex >= 0 && sizeIndex < SIZE_OPTIONS.length) {
+          handleSelectionDwell('size', SIZE_OPTIONS[sizeIndex].value);
         }
+      } else {
+        setHoverTarget(null);
+        setSelectionProgress(0);
+        dwellStartTime.current = null;
       }
     } 
-    // 5. DRAW (INDEX)
     else if (isIndexUp && !isMiddleUp) {
       mode = GestureMode.DRAW;
       drawOnCanvas(indexTip, false);
@@ -336,98 +320,82 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
   useEffect(() => {
     if (initializedRef.current || !videoRef.current) return;
     initializedRef.current = true;
-
     const initEngine = async () => {
       try {
         setInitStatus("Waking up sensors...");
         let retry = 0;
         const win = window as any;
-        
         while ((typeof win.Hands === 'undefined' || typeof win.Camera === 'undefined') && retry < 100) {
-          await new Promise(r => setTimeout(r, 100));
-          retry++;
+          await new Promise(r => setTimeout(r, 100)); retry++;
         }
-
         if (typeof win.Hands === 'undefined' || typeof win.Camera === 'undefined') {
-          throw new Error("Library loading timeout. Please check your connection.");
+          throw new Error("Vision engine failed to load. Please reload.");
         }
-
-        const hands = new win.Hands({ 
-          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` 
-        });
-
+        const hands = new win.Hands({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
         hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
         hands.onResults((results: any) => { if (onResultsRef.current) onResultsRef.current(results); });
-
         const camera = new win.Camera(videoRef.current, {
-          onFrame: async () => {
-            if (videoRef.current && videoRef.current.readyState >= 2) await hands.send({ image: videoRef.current });
-          },
+          onFrame: async () => { if (videoRef.current && videoRef.current.readyState >= 2) await hands.send({ image: videoRef.current }); },
           width: 1280, height: 720
         });
-
         await camera.start();
         setIsReady(true);
-      } catch (err: any) {
-        setErrorMessage(err.message || "Initialization failed.");
-      }
+      } catch (err: any) { setErrorMessage(err.message || "Initialization failed."); }
     };
-
     initEngine();
-
     const handleResize = () => {
       [drawingCanvasRef, activeStrokeCanvasRef, canvasRef].forEach(ref => {
-        if (ref.current) {
-          ref.current.width = window.innerWidth;
-          ref.current.height = window.innerHeight;
-        }
+        if (ref.current) { ref.current.width = window.innerWidth; ref.current.height = window.innerHeight; }
       });
       redrawHistory();
     };
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
+    window.addEventListener('resize', handleResize); handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, [redrawHistory]);
-
-  const handleAnalyze = async () => {
-    if (!drawingCanvasRef.current) return;
-    setIsAnalyzing(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: { parts: [
-          { text: "Examine this digital smartboard drawing. Identify all shapes and symbols. If the user promoted shapes via the 3-finger gesture, comment on their accuracy. Provide a clever, encouraging artistic critique." },
-          { inlineData: { mimeType: 'image/png', data: drawingCanvasRef.current.toDataURL('image/png').split(',')[1] } }
-        ]}
-      });
-      setAiAnalysis(response.text);
-    } catch (e) { 
-      setAiAnalysis("Vision Intelligence experienced a hiccup."); 
-    }
-    setIsAnalyzing(false);
-  };
 
   return (
     <div className="relative w-full h-full cursor-none bg-slate-950 overflow-hidden">
       <video ref={videoRef} className="hidden" />
-      
       <div className="absolute inset-0 z-0">
         <video ref={videoRef} className="w-full h-full object-cover scale-x-[-1] opacity-30 blur-sm brightness-75" autoPlay muted playsInline />
       </div>
 
+      {/* Sidebars Restored */}
+      <div className="absolute left-0 top-0 bottom-0 w-24 z-20 flex flex-col items-center justify-around py-32 bg-black/40 backdrop-blur-3xl border-r border-white/5">
+        <div className="flex flex-col items-center gap-8">
+          {COLOR_OPTIONS.map((opt) => (
+            <div key={opt.value} className={`w-12 h-12 rounded-full border-2 transition-all flex items-center justify-center relative
+                ${color === opt.value ? 'border-white scale-125 shadow-[0_0_25px_rgba(255,255,255,0.4)]' : 'border-white/10 opacity-30'}
+                ${hoverTarget?.value === opt.value ? 'opacity-100 ring-4 ring-white/20' : ''}`}
+              style={{ backgroundColor: opt.value }}
+            >
+              {color === opt.value && <div className="absolute -right-12 w-2 h-2 rounded-full bg-white shadow-lg" />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute right-0 top-0 bottom-0 w-24 z-20 flex flex-col items-center justify-around py-48 bg-black/40 backdrop-blur-3xl border-l border-white/5">
+         <div className="flex flex-col items-center gap-12">
+          {SIZE_OPTIONS.map((opt) => (
+            <div key={opt.value} className={`w-14 h-14 rounded-3xl border-2 transition-all flex flex-col items-center justify-center gap-1
+                ${brushSize === opt.value ? 'border-blue-500 bg-blue-500/20 shadow-[0_0_25px_rgba(59,130,246,0.3)]' : 'border-white/5 opacity-30'}
+                ${hoverTarget?.value === opt.value ? 'opacity-100 bg-white/5' : ''}`}
+            >
+              <div className="rounded-full bg-white" style={{ width: opt.value / 1.5, height: opt.value / 1.5 }} />
+              <span className="text-[9px] font-black tracking-widest text-white/50">{opt.label[0]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {cursorPos && (
-        <div 
-          className="absolute z-50 pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
-          style={{ left: cursorPos.x, top: cursorPos.y }}
-        >
+        <div className="absolute z-50 pointer-events-none transform -translate-x-1/2 -translate-y-1/2" style={{ left: cursorPos.x, top: cursorPos.y }}>
           <div className="relative w-16 h-16 flex items-center justify-center">
              <div className="absolute inset-0 rounded-full border-4 border-white/10 scale-90" />
              {selectionProgress > 0 && (
               <svg className="absolute inset-0 w-full h-full -rotate-90">
-                <circle cx="32" cy="32" r="28" fill="transparent" stroke="white" strokeWidth="4"
-                  strokeDasharray={`${selectionProgress * 1.76} 176`} className="transition-all duration-75" />
+                <circle cx="32" cy="32" r="28" fill="transparent" stroke="white" strokeWidth="4" strokeDasharray={`${selectionProgress * 1.76} 176`} className="transition-all duration-75" />
               </svg>
             )}
             <div className="w-2 h-2 bg-white rounded-full shadow-[0_0_15px_white]" />
@@ -440,8 +408,15 @@ const Smartboard: React.FC<SmartboardProps> = ({ color, setColor, brushSize, set
       <canvas ref={canvasRef} className="absolute inset-0 z-30 w-full h-full pointer-events-none scale-x-[-1] opacity-20" />
 
       <div className="absolute right-32 bottom-32 z-40">
-        <button 
-          onClick={handleAnalyze} disabled={isAnalyzing}
+        <button onClick={() => {
+            if (!drawingCanvasRef.current) return;
+            setIsAnalyzing(true);
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            ai.models.generateContent({
+              model: 'gemini-3-flash-preview',
+              contents: { parts: [{ text: "Examine this digital smartboard drawing. Identify shapes and offer a witty critique." }, { inlineData: { mimeType: 'image/png', data: drawingCanvasRef.current.toDataURL('image/png').split(',')[1] } }]}
+            }).then(res => setAiAnalysis(res.text)).catch(() => setAiAnalysis("Vision Intelligence experienced a hiccup.")).finally(() => setIsAnalyzing(false));
+          }} disabled={isAnalyzing}
           className="bg-blue-600 hover:bg-blue-500 w-20 h-20 rounded-[2rem] border border-white/20 shadow-2xl transition-all hover:scale-110 active:scale-95 flex items-center justify-center group"
         >
           {isAnalyzing ? <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" /> : <span className="text-3xl">✨</span>}
